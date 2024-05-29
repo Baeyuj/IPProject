@@ -1,10 +1,3 @@
-/**
- * Created by J. Yun, SCH Univ. (yun@sch.ac.kr)
- * - use ADXL345 accelerometer with 'i2c-bus' Node.js module
- * - use ADXL345 example (ADXL345.cpp) in Exploring RPi book by D. Molloy
- * - use tas_sample created by I.-Y. Ahn, KETI
- */
-
 var net = require('net');
 var util = require('util');
 var fs = require('fs');
