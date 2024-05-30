@@ -1,6 +1,7 @@
 const net = require('net');
 const util = require('util');
 const fs = require('fs');
+const Gpio = require('onoff').Gpio;
 const xml2js = require('xml2js');
 const wdt = require('./wdt');
 
@@ -12,7 +13,6 @@ let download_arr = [];
 
 let conf = {};
 
-// 비동기 방식으로 설정 파일(conf.xml)을 읽어옵니다.
 fs.readFile('conf.xml', 'utf-8', function (err, data) {
     if (err) {
         console.log("FATAL An error occurred trying to read in the file: " + err);
@@ -53,6 +53,9 @@ fs.readFile('conf.xml', 'utf-8', function (err, data) {
 let tas_state = 'init';
 let upload_client = null;
 let tas_download_count = 0;
+
+const HOT_ON_PIN = new Gpio(22, 'out');
+const HOT_OFF_PIN = new Gpio(23, 'out');
 
 function on_receive(data) {
     if (tas_state === 'connect' || tas_state === 'reconnect' || tas_state === 'upload') {
@@ -138,7 +141,6 @@ wdt.set_wdt(require('shortid').generate(), 3, tas_watchdog);
 
 setInterval(() => {
     if (tas_state === 'upload') {
-        // 여기서는 펌프 제어 액션을 시뮬레이션합니다. 실제 논리로 교체해야 합니다.
         const action = Math.floor(Math.random() * 6) + 1;
 
         console.log(`Received action: ${action}`);
@@ -147,10 +149,15 @@ setInterval(() => {
         // For example, if action is 3 or 4, handle hot water pump ON/OFF
         if (action === 3) {
             console.log('Hot water pump ON');
-            // Add GPIO logic here to turn on the hot water pump
+            HOT_ON_PIN.writeSync(1);
+            HOT_OFF_PIN.writeSync(0);
         } else if (action === 4) {
             console.log('Hot water pump OFF');
-            // Add GPIO logic here to turn off the hot water pump
+            HOT_ON_PIN.writeSync(0);
+            HOT_OFF_PIN.writeSync(1);
+        } else {
+            HOT_ON_PIN.writeSync(0);
+            HOT_OFF_PIN.writeSync(0);
         }
 
         for (let i = 0; i < upload_arr.length; i++) {
@@ -163,3 +170,9 @@ setInterval(() => {
         }
     }
 }, 1000);
+
+process.on('SIGINT', () => {
+    HOT_ON_PIN.unexport();
+    HOT_OFF_PIN.unexport();
+    process.exit();
+});
