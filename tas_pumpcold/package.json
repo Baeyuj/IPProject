@@ -1,0 +1,24 @@
+{
+	"name": "tas_pumpcold",
+	"version": "0.0.1",
+	"description": "TAS for tas_pumpcold",
+	"main": "app.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"keywords": [
+		"TAS",
+		"Pumpcold",
+		"Mobius",
+		"nCube",
+		"oneM2M"
+	],
+	"author": "SJ",
+	"license": "ISC",
+	"dependencies": {
+		"fs": "0.0.1-security",
+		"net": "^1.0.2",
+		"shortid": "^2.2.14",
+		"xml2js": "^0.4.19"
+	}
+}
