@@ -2,6 +2,7 @@ const net = require('net');
 const util = require('util');
 const fs = require('fs');
 const xml2js = require('xml2js');
+const Gpio = require('onoff').Gpio; // GPIO 핀 제어를 위해 onoff 모듈 사용
 const wdt = require('./wdt');
 
 let useparentport = '';
@@ -16,13 +17,13 @@ let conf = {};
 fs.readFile('conf.xml', 'utf-8', function (err, data) {
     if (err) {
         console.log("FATAL An error occurred trying to read in the file: " + err);
-        console.log("error : set to default for configuration")
+        console.log("error : set to default for configuration");
     } else {
         const parser = new xml2js.Parser({ explicitArray: false });
         parser.parseString(data, function (err, result) {
             if (err) {
                 console.log("Parsing An error occurred trying to read in the file: " + err);
-                console.log("error : set to default for configuration")
+                console.log("error : set to default for configuration");
             } else {
                 const jsonString = JSON.stringify(result);
                 conf = JSON.parse(jsonString)['m2m:conf'];
@@ -53,6 +54,23 @@ fs.readFile('conf.xml', 'utf-8', function (err, data) {
 let tas_state = 'init';
 let upload_client = null;
 let tas_download_count = 0;
+
+// GPIO 핀 설정
+const DRAIN_ON_PIN = new Gpio(24, 'out');
+const DRAIN_OFF_PIN = new Gpio(25, 'out');
+
+
+function initializePump() {
+    console.log('Initializing water pump out');
+    DRAIN_ON_PIN.writeSync(1);
+    DRAIN_OFF_PIN.writeSync(0);
+
+    setTimeout(() => {
+        console.log('Stopping water pump out after initialization');
+        DRAIN_ON_PIN.writeSync(0);
+        DRAIN_OFF_PIN.writeSync(1);
+    }, 10000); // 10초 후에 물 빼기 펌프 끄기
+}
 
 function on_receive(data) {
     if (tas_state === 'connect' || tas_state === 'reconnect' || tas_state === 'upload') {
@@ -113,6 +131,7 @@ function tas_watchdog() {
 
         if (upload_client) {
             console.log('tas init ok');
+            initializePump(); // 프로그램 시작 시 물 빼기 펌프 초기화 함수 호출
             tas_state = 'init_thing';
         }
     } else if (tas_state === 'init_thing') {
@@ -138,19 +157,21 @@ wdt.set_wdt(require('shortid').generate(), 3, tas_watchdog);
 
 setInterval(() => {
     if (tas_state === 'upload') {
-        // 여기서는 펌프 제어 액션을 시뮬레이션합니다. 실제 논리로 교체해야 합니다.
         const action = Math.floor(Math.random() * 6) + 1;
 
         console.log(`Received action: ${action}`);
         
-        // Add logic to handle GPIO here based on the action
-        // For example, if action is 5 or 6, handle water pump out ON/OFF
         if (action === 5) {
             console.log('Water pump out ON');
-            // Add GPIO logic here to turn on the water pump out
+            DRAIN_ON_PIN.writeSync(1);
+            DRAIN_OFF_PIN.writeSync(0);
         } else if (action === 6) {
             console.log('Water pump out OFF');
-            // Add GPIO logic here to turn off the water pump out
+            DRAIN_ON_PIN.writeSync(0);
+            DRAIN_OFF_PIN.writeSync(1);
+        } else {
+            DRAIN_ON_PIN.writeSync(0);
+            DRAIN_OFF_PIN.writeSync(0);
         }
 
         for (let i = 0; i < upload_arr.length; i++) {
@@ -163,3 +184,10 @@ setInterval(() => {
         }
     }
 }, 1000);
+
+// Clean up GPIO on exit
+process.on('SIGINT', () => {
+    DRAIN_ON_PIN.unexport();
+    DRAIN_OFF_PIN.unexport();
+    process.exit();
+});
