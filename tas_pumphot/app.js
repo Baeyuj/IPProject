@@ -1,8 +1,9 @@
 const net = require('net');
+const net = require('net');
 const util = require('util');
 const fs = require('fs');
-const Gpio = require('onoff').Gpio;
 const xml2js = require('xml2js');
+const Gpio = require('onoff').Gpio;
 const wdt = require('./wdt');
 
 let useparentport = '';
@@ -13,6 +14,8 @@ let download_arr = [];
 
 let conf = {};
 
+
+// 비동기 방식으로 설정 파일(conf.xml)을 읽어옵니다.
 fs.readFile('conf.xml', 'utf-8', function (err, data) {
     if (err) {
         console.log("FATAL An error occurred trying to read in the file: " + err);
@@ -54,8 +57,7 @@ let tas_state = 'init';
 let upload_client = null;
 let tas_download_count = 0;
 
-const HOT_ON_PIN = new Gpio(22, 'out');
-const HOT_OFF_PIN = new Gpio(23, 'out');
+const HOT_ON_PIN = new Gpio(22, 'out'); //22, 23
 
 function on_receive(data) {
     if (tas_state === 'connect' || tas_state === 'reconnect' || tas_state === 'upload') {
@@ -102,6 +104,7 @@ function tas_watchdog() {
         upload_client = new net.Socket();
 
         upload_client.on('data', on_receive);
+        upload_client.on('data', handleServerData);
 
         upload_client.on('error', function(err) {
             console.log(err);
@@ -121,7 +124,7 @@ function tas_watchdog() {
     } else if (tas_state === 'init_thing') {
         tas_state = 'connect';
     } else if (tas_state === 'connect' || tas_state === 'reconnect') {
-        upload_client.connect(useparentport, useparenthostname, function() {
+        upload_client.connect(3000, useparenthostname, function() {
             console.log('upload Connected');
             tas_download_count = 0;
             for (let i = 0; i < download_arr.length; i++) {
@@ -139,40 +142,76 @@ function tas_watchdog() {
 
 wdt.set_wdt(require('shortid').generate(), 3, tas_watchdog);
 
-setInterval(() => {
-    if (tas_state === 'upload') {
-        const action = Math.floor(Math.random() * 6) + 1;
-
-        console.log(`Received action: ${action}`);
-        
-        // Add logic to handle GPIO here based on the action
-        // For example, if action is 3 or 4, handle hot water pump ON/OFF
-        if (action === 3) {
-            console.log('Hot water pump ON');
-            HOT_ON_PIN.writeSync(1);
-            HOT_OFF_PIN.writeSync(0);
-        } else if (action === 4) {
-            console.log('Hot water pump OFF');
-            HOT_ON_PIN.writeSync(0);
-            HOT_OFF_PIN.writeSync(1);
-        } else {
-            HOT_ON_PIN.writeSync(0);
-            HOT_OFF_PIN.writeSync(0);
-        }
-
-        for (let i = 0; i < upload_arr.length; i++) {
-            if (upload_arr[i].id === "pumphot#1") {
-                const cin = { ctname: upload_arr[i].ctname, con: action };
-                console.log("SEND : " + JSON.stringify(cin) + ' ---->');
-                upload_client.write(JSON.stringify(cin) + '<EOF>');
-                break;
-            }
-        }
+// 데이터를 수신했을 때 호출되는 함수입니다.
+function handleServerData(data) {
+    // 서버로부터 받은 데이터를 처리하는 로직을 여기에 추가합니다.
+    // 예를 들어, 서버로부터 받은 값을 pumpAction 변수에 할당하여 해당 값을 기반으로 펌프를 제어합니다.
+    const pumpAction = parseInt(data); // 받은 데이터를 정수형으로 변환합니다.
+    console.log('Received action from server:', pumpAction);
+    
+    // 액션 값에 따라 GPIO 핀을 제어합니다.
+    if (pumpAction === 1) {
+        console.log('Turning on the cold water pump.');
+        HOT_ON_PIN.writeSync(1); // GPIO 핀을 HIGH로 설정하여 펌프를 켭니다.
+    } else if (pumpAction === 0) {
+        console.log('Turning off the cold water pump.');
+        HOT_ON_PIN.writeSync(0); // GPIO 핀을 LOW로 설정하여 펌프를 끕니다.
+    } else {
+        console.log('Invalid action received from server:', pumpAction);
     }
-}, 1000);
+}
 
+// 타임 아웃을 설정하고, 주기적으로 TAS의 상태를 체크하는 함수입니다.
+function monitorTAS() {
+    // 이전의 TAS 워치독 코드는 그대로 사용합니다.
+    // ...
+}
+
+// 3초마다 TAS의 상태를 체크합니다.
+wdt.set_wdt(require('shortid').generate(), 3, monitorTAS);
+
+// 프로세스 종료 시 GPIO 리소스를 해제합니다.
 process.on('SIGINT', () => {
     HOT_ON_PIN.unexport();
-    HOT_OFF_PIN.unexport();
     process.exit();
 });
+
+var isMeasuring = false; // 측정 중 여부
+
+// TCP 서버 생성
+const server = net.createServer((socket) => {
+  console.log('Client connected');
+
+  socket.on('data', (data) => {
+    const receivedData = data.toString().trim(); // 수신된 데이터
+    console.log('Received:', receivedData);
+
+    if (receivedData === '0') {
+      // 측정 중이 아닌 경우에만 측정 중지
+      if (isMeasuring) {
+        console.log('Measurement stopped');
+        isMeasuring = false;
+      }
+    } else if (receivedData === '1') {
+      // 측정 중이 아닌 경우에만 측정 시작
+      if (!isMeasuring) {
+        console.log('Measurement started');
+        isMeasuring = true;
+      }
+    } else {
+      console.log('Invalid command:', receivedData);
+    }
+  });
+
+  socket.on('end', () => {
+    console.log('Client disconnected');
+  });
+});
+
+const PORT = 3000;
+const HOST = '0.0.0.0';
+
+server.listen(PORT, HOST, () => {
+  console.log(`Server listening on ${HOST}:${PORT}`);
+});
+
