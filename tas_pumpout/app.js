@@ -56,7 +56,8 @@ let tas_state = 'init';
 let upload_client = null;
 let tas_download_count = 0;
 
-const DRAIN_ON_PIN = new Gpio(24, 'out'); //24, 25
+const DRAIN_ON_PIN = new Gpio(20, 'out'); // A : 20
+const DRAIN_OFF_PIN = new Gpio(21, 'out'); // B : 21
 
 function on_receive(data) {
     if (tas_state === 'connect' || tas_state === 'reconnect' || tas_state === 'upload') {
