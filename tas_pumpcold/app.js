@@ -2,6 +2,7 @@ const net = require('net');
 const util = require('util');
 const fs = require('fs');
 const xml2js = require('xml2js');
+const Gpio = require('onoff').Gpio;
 const wdt = require('./wdt');
 
 let useparentport = '';
@@ -53,6 +54,9 @@ fs.readFile('conf.xml', 'utf-8', function (err, data) {
 let tas_state = 'init';
 let upload_client = null;
 let tas_download_count = 0;
+
+const COLD_ON_PIN = new Gpio(17, 'out');
+const COLD_OFF_PIN = new Gpio(18, 'out');
 
 function on_receive(data) {
     if (tas_state === 'connect' || tas_state === 'reconnect' || tas_state === 'upload') {
@@ -147,10 +151,15 @@ setInterval(() => {
         // For example, if action is 1 or 2, handle cold water pump ON/OFF
         if (action === 1) {
             console.log('Cold water pump ON');
-            // Add GPIO logic here to turn on the cold water pump
+            COLD_ON_PIN.writeSync(1);
+            COLD_OFF_PIN.writeSync(0);
         } else if (action === 2) {
             console.log('Cold water pump OFF');
-            // Add GPIO logic here to turn off the cold water pump
+            COLD_ON_PIN.writeSync(0);
+            COLD_OFF_PIN.writeSync(1);
+        } else {
+            COLD_ON_PIN.writeSync(0);
+            COLD_OFF_PIN.writeSync(0);
         }
 
         for (let i = 0; i < upload_arr.length; i++) {
@@ -163,3 +172,9 @@ setInterval(() => {
         }
     }
 }, 1000);
+
+process.on('SIGINT', () => {
+    COLD_ON_PIN.unexport();
+    COLD_OFF_PIN.unexport();
+    process.exit();
+});
