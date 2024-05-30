@@ -1,5 +1,4 @@
 const net = require('net');
-const net = require('net');
 const util = require('util');
 const fs = require('fs');
 const xml2js = require('xml2js');
@@ -175,41 +174,6 @@ process.on('SIGINT', () => {
     HOT_ON_PIN.unexport();
     process.exit();
 });
-
-var isMeasuring = false; // 측정 중 여부
-
-// TCP 서버 생성
-const server = net.createServer((socket) => {
-  console.log('Client connected');
-
-  socket.on('data', (data) => {
-    const receivedData = data.toString().trim(); // 수신된 데이터
-    console.log('Received:', receivedData);
-
-    if (receivedData === '0') {
-      // 측정 중이 아닌 경우에만 측정 중지
-      if (isMeasuring) {
-        console.log('Measurement stopped');
-        isMeasuring = false;
-      }
-    } else if (receivedData === '1') {
-      // 측정 중이 아닌 경우에만 측정 시작
-      if (!isMeasuring) {
-        console.log('Measurement started');
-        isMeasuring = true;
-      }
-    } else {
-      console.log('Invalid command:', receivedData);
-    }
-  });
-
-  socket.on('end', () => {
-    console.log('Client disconnected');
-  });
-});
-
-const PORT = 3000;
-const HOST = '0.0.0.0';
 
 server.listen(PORT, HOST, () => {
   console.log(`Server listening on ${HOST}:${PORT}`);
