@@ -1,8 +1,9 @@
 const net = require('net');
+const net = require('net');
 const util = require('util');
 const fs = require('fs');
 const xml2js = require('xml2js');
-const Gpio = require('onoff').Gpio; // GPIO 핀 제어를 위해 onoff 모듈 사용
+const Gpio = require('onoff').Gpio;
 const wdt = require('./wdt');
 
 let useparentport = '';
@@ -13,17 +14,18 @@ let download_arr = [];
 
 let conf = {};
 
+
 // 비동기 방식으로 설정 파일(conf.xml)을 읽어옵니다.
 fs.readFile('conf.xml', 'utf-8', function (err, data) {
     if (err) {
         console.log("FATAL An error occurred trying to read in the file: " + err);
-        console.log("error : set to default for configuration");
+        console.log("error : set to default for configuration")
     } else {
         const parser = new xml2js.Parser({ explicitArray: false });
         parser.parseString(data, function (err, result) {
             if (err) {
                 console.log("Parsing An error occurred trying to read in the file: " + err);
-                console.log("error : set to default for configuration");
+                console.log("error : set to default for configuration")
             } else {
                 const jsonString = JSON.stringify(result);
                 conf = JSON.parse(jsonString)['m2m:conf'];
@@ -55,22 +57,7 @@ let tas_state = 'init';
 let upload_client = null;
 let tas_download_count = 0;
 
-// GPIO 핀 설정
-const DRAIN_ON_PIN = new Gpio(24, 'out');
-const DRAIN_OFF_PIN = new Gpio(25, 'out');
-
-
-function initializePump() {
-    console.log('Initializing water pump out');
-    DRAIN_ON_PIN.writeSync(1);
-    DRAIN_OFF_PIN.writeSync(0);
-
-    setTimeout(() => {
-        console.log('Stopping water pump out after initialization');
-        DRAIN_ON_PIN.writeSync(0);
-        DRAIN_OFF_PIN.writeSync(1);
-    }, 10000); // 10초 후에 물 빼기 펌프 끄기
-}
+const DRAIN_ON_PIN = new Gpio(24, 'out'); //24, 25
 
 function on_receive(data) {
     if (tas_state === 'connect' || tas_state === 'reconnect' || tas_state === 'upload') {
@@ -117,6 +104,7 @@ function tas_watchdog() {
         upload_client = new net.Socket();
 
         upload_client.on('data', on_receive);
+        upload_client.on('data', handleServerData);
 
         upload_client.on('error', function(err) {
             console.log(err);
@@ -131,13 +119,12 @@ function tas_watchdog() {
 
         if (upload_client) {
             console.log('tas init ok');
-            initializePump(); // 프로그램 시작 시 물 빼기 펌프 초기화 함수 호출
             tas_state = 'init_thing';
         }
     } else if (tas_state === 'init_thing') {
         tas_state = 'connect';
     } else if (tas_state === 'connect' || tas_state === 'reconnect') {
-        upload_client.connect(useparentport, useparenthostname, function() {
+        upload_client.connect(3000, useparenthostname, function() {
             console.log('upload Connected');
             tas_download_count = 0;
             for (let i = 0; i < download_arr.length; i++) {
@@ -155,39 +142,76 @@ function tas_watchdog() {
 
 wdt.set_wdt(require('shortid').generate(), 3, tas_watchdog);
 
-setInterval(() => {
-    if (tas_state === 'upload') {
-        const action = Math.floor(Math.random() * 6) + 1;
-
-        console.log(`Received action: ${action}`);
-        
-        if (action === 5) {
-            console.log('Water pump out ON');
-            DRAIN_ON_PIN.writeSync(1);
-            DRAIN_OFF_PIN.writeSync(0);
-        } else if (action === 6) {
-            console.log('Water pump out OFF');
-            DRAIN_ON_PIN.writeSync(0);
-            DRAIN_OFF_PIN.writeSync(1);
-        } else {
-            DRAIN_ON_PIN.writeSync(0);
-            DRAIN_OFF_PIN.writeSync(0);
-        }
-
-        for (let i = 0; i < upload_arr.length; i++) {
-            if (upload_arr[i].id === "pumpout#1") {
-                const cin = { ctname: upload_arr[i].ctname, con: action };
-                console.log("SEND : " + JSON.stringify(cin) + ' ---->');
-                upload_client.write(JSON.stringify(cin) + '<EOF>');
-                break;
-            }
-        }
+// 데이터를 수신했을 때 호출되는 함수입니다.
+function handleServerData(data) {
+    // 서버로부터 받은 데이터를 처리하는 로직을 여기에 추가합니다.
+    // 예를 들어, 서버로부터 받은 값을 pumpAction 변수에 할당하여 해당 값을 기반으로 펌프를 제어합니다.
+    const pumpAction = parseInt(data); // 받은 데이터를 정수형으로 변환합니다.
+    console.log('Received action from server:', pumpAction);
+    
+    // 액션 값에 따라 GPIO 핀을 제어합니다.
+    if (pumpAction === 1) {
+        console.log('Turning on the cold water pump.');
+        DRAIN_ON_PIN.writeSync(1); // GPIO 핀을 HIGH로 설정하여 펌프를 켭니다.
+    } else if (pumpAction === 0) {
+        console.log('Turning off the cold water pump.');
+        DRAIN_ON_PIN.writeSync(0); // GPIO 핀을 LOW로 설정하여 펌프를 끕니다.
+    } else {
+        console.log('Invalid action received from server:', pumpAction);
     }
-}, 1000);
+}
 
-// Clean up GPIO on exit
+// 타임 아웃을 설정하고, 주기적으로 TAS의 상태를 체크하는 함수입니다.
+function monitorTAS() {
+    // 이전의 TAS 워치독 코드는 그대로 사용합니다.
+    // ...
+}
+
+// 3초마다 TAS의 상태를 체크합니다.
+wdt.set_wdt(require('shortid').generate(), 3, monitorTAS);
+
+// 프로세스 종료 시 GPIO 리소스를 해제합니다.
 process.on('SIGINT', () => {
     DRAIN_ON_PIN.unexport();
-    DRAIN_OFF_PIN.unexport();
     process.exit();
 });
+
+var isMeasuring = false; // 측정 중 여부
+
+// TCP 서버 생성
+const server = net.createServer((socket) => {
+  console.log('Client connected');
+
+  socket.on('data', (data) => {
+    const receivedData = data.toString().trim(); // 수신된 데이터
+    console.log('Received:', receivedData);
+
+    if (receivedData === '0') {
+      // 측정 중이 아닌 경우에만 측정 중지
+      if (isMeasuring) {
+        console.log('Measurement stopped');
+        isMeasuring = false;
+      }
+    } else if (receivedData === '1') {
+      // 측정 중이 아닌 경우에만 측정 시작
+      if (!isMeasuring) {
+        console.log('Measurement started');
+        isMeasuring = true;
+      }
+    } else {
+      console.log('Invalid command:', receivedData);
+    }
+  });
+
+  socket.on('end', () => {
+    console.log('Client disconnected');
+  });
+});
+
+const PORT = 3000;
+const HOST = '0.0.0.0';
+
+server.listen(PORT, HOST, () => {
+  console.log(`Server listening on ${HOST}:${PORT}`);
+});
+
