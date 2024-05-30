@@ -1,3 +1,4 @@
+// 문제 발생, 0이 실행이고 1이 중지임
 const net = require('net');
 const util = require('util');
 const fs = require('fs');
