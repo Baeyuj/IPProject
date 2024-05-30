@@ -56,7 +56,7 @@ let tas_state = 'init';
 let upload_client = null;
 let tas_download_count = 0;
 
-const COLD_ON_PIN = new Gpio(17, 'out');
+const COLD_ON_PIN = new Gpio(17, 'out'); //A-1A : 17, A-1B : 18
 
 function on_receive(data) {
     if (tas_state === 'connect' || tas_state === 'reconnect' || tas_state === 'upload') {
