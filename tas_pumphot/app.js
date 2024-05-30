@@ -1,4 +1,3 @@
-// 문제 발생, 0이 실행이고 1이 중지임
 const net = require('net');
 const util = require('util');
 const fs = require('fs');
@@ -57,7 +56,8 @@ let tas_state = 'init';
 let upload_client = null;
 let tas_download_count = 0;
 
-const HOT_ON_PIN = new Gpio(22, 'out'); //22, 23
+const HOT_ON_PIN = new Gpio(19, 'out'); //B-1A
+const HOT_OFF_PIN = new Gpio(26, 'out'); //B-1B
 
 function on_receive(data) {
     if (tas_state === 'connect' || tas_state === 'reconnect' || tas_state === 'upload') {
