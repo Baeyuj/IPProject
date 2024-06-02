@@ -89,6 +89,7 @@ function on_receive(data) {
                             if (download_arr[j].ctname === sink_obj.ctname) {
                                 const g_down_buf = JSON.stringify({ id: download_arr[i].id, con: sink_obj.con });
                                 console.log(g_down_buf + ' <----');
+                                control_pump(sink_obj.con); //추가
                                 break;
                             }
                         }
@@ -97,6 +98,14 @@ function on_receive(data) {
             }
         }
     }
+}
+
+// 추가
+function control_pump(comm_num) {
+    var parent_process = cp.fork("pumpcold.js", [comm_num]);	
+    parent_process.on('close', function (code) {
+        // console.log('Child process is exiting with exit code: ' + code);
+    });
 }
 
 function tas_watchdog() {
@@ -123,6 +132,7 @@ function tas_watchdog() {
         }
     } else if (tas_state === 'init_thing') {
         tas_state = 'connect';
+        control_pump('0'); //추가
     } else if (tas_state === 'connect' || tas_state === 'reconnect') {
         upload_client.connect(3000, useparenthostname, function() {
             console.log('upload Connected');
