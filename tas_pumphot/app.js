@@ -21,7 +21,7 @@ function fetchCinFromMobius() {
     const options = {
         hostname: '203.253.128.177',
         port: 7579,
-        path: '/Mobius/IoTPTeam2/pumpHOT/la',  // 'la'는 latest content instance
+        path: '/Mobius/IoTPTeam2/pumphot/la',  // 'la'는 latest content instance
         method: 'GET',
         headers: {
             'X-M2M-RI': '12345',
