@@ -103,8 +103,8 @@ let tas_state = 'init';
 let upload_client = null;
 let tas_download_count = 0;
 
-const OUT_ON_PIN = new Gpio(19, 'out'); //A-1A : 19, A-1B : 26
-const OUT_OFF_PIN = new Gpio(26, 'out'); //A-1A : 19, A-1B : 26
+const OUT_ON_PIN = new Gpio(20, 'out'); 
+const OUT_OFF_PIN = new Gpio(21, 'out'); 
 
 function on_receive(data) {
     if (tas_state === 'connect' || tas_state === 'reconnect' || tas_state === 'upload') {
