@@ -223,6 +223,6 @@ wdt.set_wdt(require('shortid').generate(), 3, monitorTAS);
 
 // 프로세스 종료 시 GPIO 리소스를 해제합니다.
 process.on('SIGINT', () => {
-    out_ON_PIN.unexport();
+    OUT_ON_PIN.unexport();
     process.exit();
 });
