@@ -5,13 +5,60 @@ const xml2js = require('xml2js');
 const Gpio = require('onoff').Gpio;
 const wdt = require('./wdt');
 
+const http = require('http');
+
 let useparentport = '';
 let useparenthostname = '';
 
 let upload_arr = [];
+
+
 let download_arr = [];
 
 let conf = {};
+
+function fetchCinFromMobius() {
+    const options = {
+        hostname: '203.253.128.177',
+        port: 7579,
+        path: '/Mobius/IoTPTeam2/pumpcold/la',  // 'la'는 latest content instance
+        method: 'GET',
+        headers: {
+            'X-M2M-RI': '12345',
+            'X-M2M-Origin': 'SOrigin',
+            'Accept': 'application/json'
+        }
+    };
+
+    const req = http.request(options, res => {
+        let data = '';
+        res.on('data', chunk => {
+            data += chunk;
+        });
+        res.on('end', () => {
+            if (res.statusCode === 200) {
+                try {
+                    const parsedData = JSON.parse(data);
+                    const cin = parsedData['m2m:cin'];
+                    if (cin) {
+                        console.log('Latest CIN Received:', cin);
+                        control_pump(cin.con); // Mobius로부터 받은 데이터를 바탕으로 펌프 제어
+                    }
+                } catch (e) {
+                    console.error('Error parsing JSON:', e);
+                }
+            } else {
+                console.log('Failed to retrieve CIN:', data);
+            }
+        });
+    });
+
+    req.on('error', error => {
+        console.error('Error making HTTP request:', error);
+    });
+
+    req.end();
+}
 
 
 // 비동기 방식으로 설정 파일(conf.xml)을 읽어옵니다.
@@ -100,12 +147,23 @@ function on_receive(data) {
     }
 }
 
-// 추가
 function control_pump(comm_num) {
-    var parent_process = cp.fork("pumpcold.js", [comm_num]);	
-    parent_process.on('close', function (code) {
-        // console.log('Child process is exiting with exit code: ' + code);
-    });
+    const action = parseInt(comm_num); // 받은 데이터를 정수형으로 변환합니다.
+    if (action === 1) {
+        console.log('Turning on the cold water pump.');
+        COLD_ON_PIN.writeSync(1); // GPIO 핀을 HIGH로 설정하여 펌프를 켭니다.
+    } else if (action === 0) {
+        console.log('Turning off the cold water pump.');
+        COLD_ON_PIN.writeSync(0); // GPIO 핀을 LOW로 설정하여 펌프를 끕니다.
+    } else {
+        console.log('Invalid pump command:', action);
+    }
+}
+
+function startDataFetching() {
+    // Mobius로부터 데이터를 주기적으로 가져오기 시작합니다.
+    // 예를 들어, 매 10초마다 Mobius로부터 최신 CIN을 요청합니다.
+    setInterval(fetchCinFromMobius, 1000); // 10,000밀리초(10초) 간격으로 설정
 }
 
 function tas_watchdog() {
@@ -113,7 +171,6 @@ function tas_watchdog() {
         upload_client = new net.Socket();
 
         upload_client.on('data', on_receive);
-        upload_client.on('data', handleServerData);
 
         upload_client.on('error', function(err) {
             console.log(err);
@@ -134,7 +191,7 @@ function tas_watchdog() {
         tas_state = 'connect';
         control_pump('0'); //추가
     } else if (tas_state === 'connect' || tas_state === 'reconnect') {
-        upload_client.connect(3000, useparenthostname, function() {
+        upload_client.connect(useparentport, useparenthostname, function() {
             console.log('upload Connected');
             tas_download_count = 0;
             for (let i = 0; i < download_arr.length; i++) {
@@ -146,30 +203,14 @@ function tas_watchdog() {
             if (tas_download_count >= download_arr.length) {
                 tas_state = 'upload';
             }
+            startDataFetching();
         });
     }
 }
 
 wdt.set_wdt(require('shortid').generate(), 3, tas_watchdog);
 
-// 데이터를 수신했을 때 호출되는 함수입니다.
-function handleServerData(data) {
-    // 서버로부터 받은 데이터를 처리하는 로직을 여기에 추가합니다.
-    // 예를 들어, 서버로부터 받은 값을 pumpAction 변수에 할당하여 해당 값을 기반으로 펌프를 제어합니다.
-    const pumpAction = parseInt(data); // 받은 데이터를 정수형으로 변환합니다.
-    console.log('Received action from server:', pumpAction);
-    
-    // 액션 값에 따라 GPIO 핀을 제어합니다.
-    if (pumpAction === 1) {
-        console.log('Turning on the cold water pump.');
-        COLD_ON_PIN.writeSync(1); // GPIO 핀을 HIGH로 설정하여 펌프를 켭니다.
-    } else if (pumpAction === 0) {
-        console.log('Turning off the cold water pump.');
-        COLD_ON_PIN.writeSync(0); // GPIO 핀을 LOW로 설정하여 펌프를 끕니다.
-    } else {
-        console.log('Invalid action received from server:', pumpAction);
-    }
-}
+
 
 // 타임 아웃을 설정하고, 주기적으로 TAS의 상태를 체크하는 함수입니다.
 function monitorTAS() {
@@ -185,4 +226,3 @@ process.on('SIGINT', () => {
     COLD_ON_PIN.unexport();
     process.exit();
 });
-
